@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CNC Controller</title>
+  <title>CNC WebSocket Controller</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -52,13 +52,15 @@
     <h1>CNC WebSocket Controller</h1>
   </header>
   <main>
+    <button id="connect" onclick="connectWebSocket()">Connect</button>
     <textarea id="gcode" placeholder="Enter G-code here"></textarea>
-    <button id="send" onclick="sendGCode()">Send G-code</button>
-    <p id="status">Status: Idle</p>
+    <button id="send" onclick="sendGCode()" disabled>Send G-code</button>
+    <p id="status">Status: Disconnected</p>
   </main>
 
   <script>
-    const webSocket = new WebSocket('ws://<ESP8266_IP>:81'); // Replace <ESP8266_IP> with the actual IP address
+    let webSocket = null;
+    const connectButton = document.getElementById('connect');
     const sendButton = document.getElementById('send');
     const statusText = document.getElementById('status');
     const gcodeTextarea = document.getElementById('gcode');
@@ -67,31 +69,53 @@
     let currentLineIndex = 0;
     let isProcessing = false;
 
-    webSocket.onopen = () => {
-      statusText.textContent = 'Status: Connected to CNC';
-    };
-
-    webSocket.onclose = () => {
-      statusText.textContent = 'Status: Disconnected';
-    };
-
-    webSocket.onerror = (error) => {
-      console.error('WebSocket Error:', error);
-      statusText.textContent = 'Status: Error in communication';
-    };
-
-    webSocket.onmessage = (event) => {
-      if (event.data.trim() === 'ok') {
-        currentLineIndex++;
-        if (currentLineIndex < gcodeLines.length) {
-          sendLine(currentLineIndex);
-        } else {
-          statusText.textContent = 'Status: All G-code processed';
-          sendButton.disabled = false;
-          isProcessing = false;
-        }
+    function connectWebSocket() {
+      if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+        alert('Already connected');
+        return;
       }
-    };
+
+      const ipAddress = prompt('Enter ESP8266 IP Address (e.g., 192.168.0.100):', '');
+      if (!ipAddress) {
+        alert('IP address is required');
+        return;
+      }
+
+      webSocket = new WebSocket(`ws://${ipAddress}:81`);
+      statusText.textContent = 'Status: Connecting...';
+
+      webSocket.onopen = () => {
+        statusText.textContent = 'Status: Connected';
+        connectButton.disabled = true;
+        sendButton.disabled = false;
+      };
+
+      webSocket.onclose = () => {
+        statusText.textContent = 'Status: Disconnected';
+        connectButton.disabled = false;
+        sendButton.disabled = true;
+      };
+
+      webSocket.onerror = (error) => {
+        console.error('WebSocket Error:', error);
+        statusText.textContent = 'Status: Connection Error';
+        connectButton.disabled = false;
+        sendButton.disabled = true;
+      };
+
+      webSocket.onmessage = (event) => {
+        if (event.data.trim() === 'ok') {
+          currentLineIndex++;
+          if (currentLineIndex < gcodeLines.length) {
+            sendLine(currentLineIndex);
+          } else {
+            statusText.textContent = 'Status: All G-code processed';
+            sendButton.disabled = false;
+            isProcessing = false;
+          }
+        }
+      };
+    }
 
     function sendGCode() {
       const gcode = gcodeTextarea.value.trim();
