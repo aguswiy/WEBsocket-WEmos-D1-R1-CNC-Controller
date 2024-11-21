@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CNC Controller</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+    }
+    header {
+      background-color: #4CAF50;
+      color: white;
+      text-align: center;
+      padding: 10px 0;
+    }
+    main {
+      margin: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    textarea {
+      width: 100%;
+      height: 200px;
+      padding: 10px;
+      font-size: 16px;
+    }
+    button {
+      padding: 10px;
+      font-size: 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:disabled {
+      background-color: #a5d6a7;
+      cursor: not-allowed;
+    }
+    #status {
+      font-size: 14px;
+      color: gray;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CNC WebSocket Controller</h1>
+  </header>
+  <main>
+    <textarea id="gcode" placeholder="Enter G-code here"></textarea>
+    <button id="send" onclick="sendGCode()">Send G-code</button>
+    <p id="status">Status: Idle</p>
+  </main>
+
+  <script>
+    const webSocket = new WebSocket('ws://<ESP8266_IP>:81'); // Replace <ESP8266_IP> with the actual IP address
+    const sendButton = document.getElementById('send');
+    const statusText = document.getElementById('status');
+    const gcodeTextarea = document.getElementById('gcode');
+
+    let gcodeLines = [];
+    let currentLineIndex = 0;
+    let isProcessing = false;
+
+    webSocket.onopen = () => {
+      statusText.textContent = 'Status: Connected to CNC';
+    };
+
+    webSocket.onclose = () => {
+      statusText.textContent = 'Status: Disconnected';
+    };
+
+    webSocket.onerror = (error) => {
+      console.error('WebSocket Error:', error);
+      statusText.textContent = 'Status: Error in communication';
+    };
+
+    webSocket.onmessage = (event) => {
+      if (event.data.trim() === 'ok') {
+        currentLineIndex++;
+        if (currentLineIndex < gcodeLines.length) {
+          sendLine(currentLineIndex);
+        } else {
+          statusText.textContent = 'Status: All G-code processed';
+          sendButton.disabled = false;
+          isProcessing = false;
+        }
+      }
+    };
+
+    function sendGCode() {
+      const gcode = gcodeTextarea.value.trim();
+      if (!gcode) {
+        alert('Please enter G-code');
+        return;
+      }
+
+      gcodeLines = gcode.split('\n').map(line => line.trim()).filter(line => line !== '');
+      currentLineIndex = 0;
+
+      if (gcodeLines.length > 0) {
+        sendButton.disabled = true;
+        isProcessing = true;
+        statusText.textContent = 'Status: Sending G-code...';
+        sendLine(currentLineIndex);
+      }
+    }
+
+    function sendLine(index) {
+      const line = gcodeLines[index];
+      if (line) {
+        statusText.textContent = `Status: Sending line ${index + 1} of ${gcodeLines.length}`;
+        webSocket.send(line);
+      }
+    }
+  </script>
+</body>
+</html>
