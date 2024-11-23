@@ -3,143 +3,97 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CNC WebSocket Controller</title>
+  <title>CNC Web Controller</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 0;
       padding: 0;
-      background-color: #f4f4f4;
-    }
-    header {
-      background-color: #4CAF50;
-      color: white;
-      text-align: center;
-      padding: 10px 0;
-    }
-    main {
-      margin: 20px;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background-color: #f0f0f0;
     }
-    textarea {
-      width: 100%;
-      height: 200px;
+    .container {
+      text-align: center;
+      padding: 20px;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    input, button {
+      margin: 5px;
       padding: 10px;
-      font-size: 16px;
-    }
-    button {
-      padding: 10px;
-      font-size: 16px;
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
-    button:disabled {
-      background-color: #a5d6a7;
-      cursor: not-allowed;
+      border: 1px solid #ccc;
+      border-radius: 5px;
     }
     #status {
-      font-size: 14px;
-      color: gray;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    @media (max-width: 600px) {
+      input, button {
+        width: 90%;
+      }
     }
   </style>
 </head>
 <body>
-  <header>
-    <h1>CNC WebSocket Controller</h1>
-  </header>
-  <main>
-    <button id="connect" onclick="connectWebSocket()">Connect</button>
-    <textarea id="gcode" placeholder="Enter G-code here"></textarea>
-    <button id="send" onclick="sendGCode()" disabled>Send G-code</button>
-    <p id="status">Status: Disconnected</p>
-  </main>
+  <div class="container">
+    <h1>CNC Web Controller</h1>
+    <input type="text" id="ipAddress" placeholder="Enter CNC IP Address" />
+    <button id="connectBtn" onclick="connect()">Connect</button>
+    <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+    <div id="status">Disconnected</div>
+  </div>
 
   <script>
-    let webSocket = null;
-    const connectButton = document.getElementById('connect');
-    const sendButton = document.getElementById('send');
-    const statusText = document.getElementById('status');
-    const gcodeTextarea = document.getElementById('gcode');
+    let websocket; // WebSocket global variable
 
-    let gcodeLines = [];
-    let currentLineIndex = 0;
-    let isProcessing = false;
-
-    function connectWebSocket() {
-      if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-        alert('Already connected');
+    function connect() {
+      const ip = document.getElementById("ipAddress").value.trim();
+      if (!ip) {
+        alert("Please enter a valid IP address.");
         return;
       }
 
-      const ipAddress = prompt('Enter ESP8266 IP Address (e.g., 192.168.1.18):', '');
-      if (!ipAddress) {
-        alert('IP address is required');
-        return;
-      }
+      // Initiate WebSocket connection
+      websocket = new WebSocket("ws://" + ip + ":8080");
 
-      webSocket = new WebSocket(`ws://${ipAddress}:81`);
-      statusText.textContent = 'Status: Connecting...';
-
-      webSocket.onopen = () => {
-        statusText.textContent = 'Status: Connected';
-        connectButton.disabled = true;
-        sendButton.disabled = false;
+      websocket.onopen = function () {
+        console.log("Connected to: " + ip);
+        document.getElementById("status").textContent = "Connected";
+        document.getElementById("connectBtn").disabled = true;
+        document.getElementById("disconnectBtn").disabled = false;
       };
 
-      webSocket.onclose = () => {
-        statusText.textContent = 'Status: Disconnected';
-        connectButton.disabled = false;
-        sendButton.disabled = true;
+      websocket.onclose = function () {
+        console.log("Disconnected");
+        document.getElementById("status").textContent = "Disconnected";
+        document.getElementById("connectBtn").disabled = false;
+        document.getElementById("disconnectBtn").disabled = true;
       };
 
-      webSocket.onerror = (error) => {
-        console.error('WebSocket Error:', error);
-        statusText.textContent = 'Status: Connection Error';
-        connectButton.disabled = false;
-        sendButton.disabled = true;
+      websocket.onerror = function (event) {
+        console.error("WebSocket Error: ", event);
+        document.getElementById("status").textContent = "Error: Unable to connect.";
       };
 
-      webSocket.onmessage = (event) => {
-        if (event.data.trim() === 'ok') {
-          currentLineIndex++;
-          if (currentLineIndex < gcodeLines.length) {
-            sendLine(currentLineIndex);
-          } else {
-            statusText.textContent = 'Status: All G-code processed';
-            sendButton.disabled = false;
-            isProcessing = false;
-          }
-        }
+      websocket.onmessage = function (event) {
+        console.log("Message from server: ", event.data);
+        // Tambahkan log untuk debugging jika diperlukan
       };
     }
 
-    function sendGCode() {
-      const gcode = gcodeTextarea.value.trim();
-      if (!gcode) {
-        alert('Please enter G-code');
-        return;
-      }
-
-      gcodeLines = gcode.split('\n').map(line => line.trim()).filter(line => line !== '');
-      currentLineIndex = 0;
-
-      if (gcodeLines.length > 0) {
-        sendButton.disabled = true;
-        isProcessing = true;
-        statusText.textContent = 'Status: Sending G-code...';
-        sendLine(currentLineIndex);
-      }
-    }
-
-    function sendLine(index) {
-      const line = gcodeLines[index];
-      if (line) {
-        statusText.textContent = `Status: Sending line ${index + 1} of ${gcodeLines.length}`;
-        webSocket.send(line);
+    function disconnect() {
+      if (websocket) {
+        websocket.close();
+        document.getElementById("status").textContent = "Disconnected";
+        document.getElementById("connectBtn").disabled = false;
+        document.getElementById("disconnectBtn").disabled = true;
       }
     }
   </script>
